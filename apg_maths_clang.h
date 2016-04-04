@@ -6,7 +6,7 @@
                          Trinity College Dublin
                                 Ireland
                           <gerdela@scss.tcd.ie>
-                        this version: 12 Feb 2016
+                        this version: 4 Apr 2016
 
 This branch only works with the Clang C compiler as it uses Clang's OpenCL
 vector data type extensions.
@@ -96,14 +96,10 @@ versor add_quat_quat (versor a, versor b);
 mat4 quat_to_mat4 (versor q);
 float dot_quat (versor q, versor r);
 versor normalise_quat (versor q);
-
-// quaternion functions -- interpolation
 versor slerp_quat (versor q, versor r, float t);
 
 /*-----------------------------PRINT FUNCTIONS-------------------------------*/
-inline void print_vec2 (vec2 v) {
-	printf ("[%.2f, %.2f]\n", v.x, v.y);
-}
+inline void print_vec2 (vec2 v) { printf ("[%.2f, %.2f]\n", v.x, v.y); }
 
 inline void print_vec3 (vec3 v) {
 	printf ("[%.2f, %.2f, %.2f]\n", v.x, v.y, v.z);
@@ -137,9 +133,7 @@ inline float length2_vec3 (vec3 v) {
 // note: proper spelling (hehe)
 inline vec3 normalise_vec3 (vec3 v) {
 	float l = length_vec3 (v);
-	if (0.0f == l) {
-		return (vec3){0.0f, 0.0f, 0.0f};
-	}
+	if (0.0f == l) { return (vec3){0.0f, 0.0f, 0.0f}; }
 	return v / l;
 }
 
@@ -191,9 +185,7 @@ inline mat4 mat4_mul_mat4 (mat4 a, mat4 b) {
 	for (int col = 0; col < 4; col++) {
 		for (int row = 0; row < 4; row++) {
 			float sum = 0.0f;
-			for (int i = 0; i < 4; i++) {
-				sum += b[i + col * 4] * a[row + i * 4];
-			}
+			for (int i = 0; i < 4; i++) { sum += b[i + col * 4] * a[row + i * 4]; }
 			r[r_index] = sum;
 			r_index++;
 		}
@@ -239,7 +231,6 @@ inline float det_mat4 (mat4 mm) {
 		mm[0] * mm[5] * mm[10] * mm[15];
 }
 
-// TODO(anton) pretty sure there's a nicer method in Lengyel's book
 // returns a 16-element array that is the inverse of a 16-element array (4x4
 // matrix).
 // see http://www.euclideanspace.com/maths/algebra/matrix/functions/inverse/fourD/index.htm
@@ -371,7 +362,6 @@ inline mat4 translate_mat4 (vec3 vv) {
 
 // rotate around x axis by an angle in degrees
 inline mat4 rot_x_deg_mat4 (float deg) {
-	// convert to radians
 	float rad = deg * ONE_DEG_IN_RAD;
 	mat4 r = identity_mat4 ();
 	r[5] = cos (rad);
@@ -383,7 +373,6 @@ inline mat4 rot_x_deg_mat4 (float deg) {
 
 // rotate around y axis by an angle in degrees
 inline mat4 rot_y_deg_mat4 (float deg) {
-	// convert to radians
 	float rad = deg * ONE_DEG_IN_RAD;
 	mat4 r = identity_mat4 ();
 	r[0] = cos (rad);
@@ -395,7 +384,6 @@ inline mat4 rot_y_deg_mat4 (float deg) {
 
 // rotate around z axis by an angle in degrees
 inline mat4 rot_z_deg_mat4 (float deg) {
-	// convert to radians
 	float rad = deg * ONE_DEG_IN_RAD;
 	mat4 r = identity_mat4 ();
 	r[0] = cos (rad);
@@ -523,14 +511,10 @@ inline versor normalise_quat (versor q) {
 	// norm(q) = q / magnitude (q)
 	// magnitude (q) = sqrt (w*w + x*x...)
 	// only compute sqrt if interior sum != 1.0
-	float sum =
-		q[0] * q[0] + q[1] * q[1] +
-		q[2] * q[2] + q[3] * q[3];
+	float sum = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
 	// NB: floats have min 6 digits of precision
 	const float thresh = 0.0001f;
-	if (fabs (1.0f - sum) < thresh) {
-		return q;
-	}
+	if (fabs (1.0f - sum) < thresh) { return q; }
 	float mag = sqrt (sum);
 	return q / mag;
 }
@@ -551,31 +535,23 @@ inline versor slerp_quat (versor q, versor r, float t) {
 	// it take the short way around, rather than the long way
 	// yeah! and furthermore Susan, I had to recalculate the d.p. after this
 	if (cos_half_theta < 0.0f) {
-		for (int i = 0; i < 4; i++) {
-			q[i] *= -1.0f;
-		}
+		for (int i = 0; i < 4; i++) { q[i] *= -1.0f; }
 		cos_half_theta = dot_quat (q, r);
 	}
 	// if qa=qb or qa=-qb then theta = 0 and we can return qa
-	if (fabs (cos_half_theta) >= 1.0f) {
-		return q;
-	}
+	if (fabs (cos_half_theta) >= 1.0f) { return q; }
 	// Calculate temporary values
 	float sin_half_theta = sqrt (1.0f - cos_half_theta * cos_half_theta);
 	// if theta = 180 degrees then result is not fully defined
 	// we could rotate around any axis normal to qa or qb
 	versor result;
 	if (fabs (sin_half_theta) < 0.001f) {
-		for (int i = 0; i < 4; i++) {
-			result[i] = (1.0f - t) * q[i] + t * r[i];
-		}
+		for (int i = 0; i < 4; i++) { result[i] = (1.0f - t) * q[i] + t * r[i]; }
 		return result;
 	}
 	float half_theta = acos (cos_half_theta);
 	float a = sin ((1.0f - t) * half_theta) / sin_half_theta;
 	float b = sin (t * half_theta) / sin_half_theta;
-	for (int i = 0; i < 4; i++) {
-		result[i] = q[i] * a + r[i] * b;
-	}
+	for (int i = 0; i < 4; i++) { result[i] = q[i] * a + r[i] * b; }
 	return result;
 }
