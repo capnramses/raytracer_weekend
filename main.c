@@ -22,12 +22,8 @@ struct World { Sphere spheres[NSPHERES]; };
 typedef struct World World;
 struct Hit_Record { float t; vec3 p; vec3 n; Material material; };
 typedef struct Hit_Record Hit_Record;
-inline double drandaa ();
 inline vec3 reflect ();
 vec3 colour_ray (Ray ray, const World* world, int depth);
-
-// returns a value between 0 and 0.9999f because AA needs < 1.0
-double drandaa () { return 0.9999f * ((double)rand () / (double)RAND_MAX); }
 
 inline vec3 rand_in_unit_sphere ();
 vec3 rand_in_unit_sphere () {
@@ -40,11 +36,6 @@ vec3 rand_in_unit_sphere () {
 
 vec3 reflect (vec3 v, vec3 n) { return v - 2.0f * dot_vec3 (v, n) * n; }
 
-// A. always scatter and attenuate by reflrectance R
-// B. scatter with no atten but absorb 1-R of the rays
-// C. mixture of A and B
-// D. only scatter with probability p and attentuation is albedo/p
-// atten == albedo for lambert
 Ray scatter_lambert (Ray inray, Hit_Record hr) {
 	vec3 target = hr.p + hr.n + rand_in_unit_sphere ();
 	Ray outray;
@@ -102,7 +93,6 @@ bool hit_spheres (Ray ray, const Sphere* spheres, Hit_Record* hr) {
 	return hit_anything;
 }
 
-// note: recursively bounces until it misses!
 vec3 colour_ray (Ray ray, const World* world, int depth) {
 	Hit_Record hr;
 	hr.t = FLT_MAX;
@@ -127,14 +117,6 @@ vec3 colour_ray (Ray ray, const World* world, int depth) {
 		} else {
 			return (vec3){0.0f, 0.0f, 0.0f};
 		}
-/*		vec3 target = hr.p + hr.n + rand_in_unit_sphere ();
-		Ray rayb;
-		rayb.origin = hr.p;
-		rayb.direction = target - hr.p;
-		rayb.tmin = ray.tmin;
-		rayb.tmax = ray.tmax;
-		float reflectivity = 0.5f;
-		return colour_ray (rayb, world) * reflectivity;*/
 	}
 	return (vec3){0.5f, 0.7f, 1.0f};
 }
