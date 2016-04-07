@@ -1,38 +1,16 @@
 // up to Chapter 10: Pos Cam
 
-#include "apg_maths_clang.h"
-#define __USE_SVID // drand48
-#include <stdlib.h>
+#include "main.h"
+#ifdef WIN32
+#include "winthreads.h"
+#endif
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
-#include <stdio.h>
-#include <string.h>
-#include <stdbool.h>
-#include <float.h>
-#include <math.h>
-#include <assert.h>
 
-// point at param = Ray.origin + direction * t;
-struct Ray { vec3 origin; vec3 direction; float tmax; float tmin; };
-typedef struct Ray Ray;
-struct Material { int type; vec3 albedo; float fuzz; float ior; };
-typedef struct Material Material;
-#define NSPHERES 4
-struct Sphere { vec3 centre; float radius; Material material; };
-typedef struct Sphere Sphere;
-struct World { Sphere spheres[NSPHERES]; };
-typedef struct World World;
-struct Hit_Record { float t; vec3 p; vec3 n; Material material; };
-typedef struct Hit_Record Hit_Record;
-inline vec3 reflect (vec3 v, vec3 n);
-inline vec3 refract (vec3 v, vec3 n, float ni_over_nt, bool* refracted);
-vec3 colour_ray (Ray ray, const World* world, int depth);
-
-inline vec3 rand_in_unit_sphere ();
 vec3 rand_in_unit_sphere () {
 	vec3 p;
 	do {
-		p = 2.0f * (vec3){drand48 (), drand48 (), drand48 ()} - (vec3){1.0f, 1.0f, 1.0f};
+		p = 2.0f * (vec3){myrand (), myrand (), myrand ()} - (vec3){1.0f, 1.0f, 1.0f};
 	} while (dot_vec3 (p, p) >= 1.0f);
 	return p;
 }
@@ -108,7 +86,7 @@ Ray scatter_dielectric (Ray inray, Hit_Record hr) {
 	if (refracted) {
 		reflect_prob = schlick (cosine, hr.material.ior);
 	}
-	if (drand48 () < reflect_prob) {
+	if (myrand () < reflect_prob) {
 		outray.origin = hr.p;
 		outray.direction = reflected_dir;
 	} else {
@@ -120,7 +98,7 @@ Ray scatter_dielectric (Ray inray, Hit_Record hr) {
 
 bool hit_spheres (Ray ray, const Sphere* spheres, Hit_Record* hr) {
 	assert (spheres); assert (hr);
-	bool hit_anything = false;
+	bool hit_aNYthing = false;
 	for (int i = 0; i < NSPHERES; i++) {
 		vec3 oc = ray.origin - spheres[i].centre;
 		float a = dot_vec3 (ray.direction, ray.direction);
@@ -135,7 +113,7 @@ bool hit_spheres (Ray ray, const Sphere* spheres, Hit_Record* hr) {
 				hr->p = ray.origin + ray.direction * tmp; // point_at_param()
 				hr->n = normalise_vec3 ((hr->p - spheres[i].centre) / spheres[i].radius);
 				memcpy (&hr->material, &spheres[i].material, sizeof (Material));
-				hit_anything = true;
+				hit_aNYthing = true;
 			}
 			tmp = (-b + srd) / a;
 			if (tmp < ray.tmax && tmp > ray.tmin && tmp < hr->t) {
@@ -143,11 +121,11 @@ bool hit_spheres (Ray ray, const Sphere* spheres, Hit_Record* hr) {
 				hr->p = ray.origin + ray.direction * tmp;
 				hr->n = normalise_vec3 ((hr->p - spheres[i].centre) / spheres[i].radius);
 				memcpy (&hr->material, &spheres[i].material, sizeof (Material));
-				hit_anything = true;
+				hit_aNYthing = true;
 			}
 		}//endif
 	}//endfor
-	return hit_anything;
+	return hit_aNYthing;
 }
 
 vec3 colour_ray (Ray ray, const World* world, int depth) {
@@ -157,9 +135,9 @@ vec3 colour_ray (Ray ray, const World* world, int depth) {
 	hr.material.albedo = (vec3){0.0f, 0.0f, 0.0f};
 	hr.material.fuzz = 0.0f;
 	hr.material.ior = 1.0f;
-	bool hit_anything = false;
-	if (hit_spheres (ray, world->spheres, &hr)) { hit_anything = true; }
-	if (hit_anything) {
+	bool hit_aNYthing = false;
+	if (hit_spheres (ray, world->spheres, &hr)) { hit_aNYthing = true; }
+	if (hit_aNYthing) {
 		Ray scattray;
 		bool valid = true, bounced = true;
 		vec3 atten;
@@ -213,42 +191,43 @@ void define_world (World* world) {
 	world->spheres[3].material.ior = 1.5f;
 }
 
+Thread_Data thread_data[MAXTHREADS];
+unsigned char* img_data;
+vec3 lower_left_corner; // of screen
+vec3 horizontal; // width of screen
+vec3 vertical; // height of screen
+World world;
+
 int main () {
-	int nx = 200, ny = 100, nsamples = 100;
-	float aspect = (float)nx / (float)ny;
-	vec3 lower_left_corner = {-aspect, -1.0f, -1.0f}; // of screen
-	vec3 horizontal = {aspect * 2.0f, 0.0f, 0.0f}; // width of screen
-	vec3 vertical = {0.0f, 2.0f, 0.0f}; // height of screen
-	unsigned char* img_data = (unsigned char*)malloc (nx * ny * 3);
-	World world;
+	float aspect = (float)NX / (float)NY;
+	lower_left_corner = (vec3){-aspect, -1.0f, -1.0f}; // of screen
+	horizontal = (vec3){aspect * 2.0f, 0.0f, 0.0f}; // width of screen
+	vertical = (vec3){0.0f, 2.0f, 0.0f}; // height of screen
+	img_data = (unsigned char*)malloc (NX * NY * 3);
 	define_world (&world);
 	Ray ray;
 	ray.origin = (vec3){0.0f, 0.0f, 0.0f}; // behind screen
 	ray.tmin = 0.0f;
 	ray.tmax = FLT_MAX;
-	for (int j = 0; j < ny; j++) {
-		for (int i = 0; i < nx; i++) {
-			vec3 colour = {0.0f, 0.0f, 0.0f};
-			for (int sample = 0; sample < nsamples; sample++) {
-				double u = ((double)i + drand48 ()) / (double)nx;
-				double v = ((double)j + drand48 ()) / (double)ny;
-				ray.direction = lower_left_corner + horizontal * (float)u + vertical * (float)v;
-				colour += colour_ray (ray, &world, 0);
-			}
-			colour /= (float)nsamples;
-			// gamma correction
-			colour = (vec3){sqrt (colour.x), sqrt (colour.y), sqrt (colour.z)};
-			{ // write to memory (ny - j - 1 instead of just j to y-flip)
-				int curr = (ny - j - 1) * nx * 3 + i * 3;
-				img_data[curr] = (int)(255.99 * colour.x); // r
-				img_data[curr + 1] = (int)(255.99 * colour.y); // g
-				img_data[curr + 2] = (int)(255.99 * colour.z); // b
-			}
+
+	// split into tiles
+	printf ("launching threads...\n");
+	int nthreads = 0;
+	for (int y = 0; y < NY; y++) {
+		for (int x = 0; x < NX; x++) {
+			memcpy (&thread_data[nthreads].ray, &ray, sizeof (Ray));
+			thread_data[nthreads].x = x;
+			thread_data[nthreads].y = y;
+			nthreads++;
+			if (nthreads >= MAXTHREADS) { create_threads (nthreads); nthreads= 0; }
 		}
 	}
+	if (nthreads > 0) { create_threads (nthreads); nthreads= 0; }
+	printf ("threads done. drawing...\n");
 	{ // write image and pointless clean up
-		//write_ppm (img_data, nx, ny, 3);
-		int r = stbi_write_png ("out.png", nx, ny, 3, img_data, 3 * nx); assert (r);
+		//write_ppm (img_data, NX, NY, 3);
+		int r = stbi_write_png ("out.png", NX, NY, 3, img_data, 3 * NX);
+		assert (r);
 		assert (img_data); free (img_data); img_data = NULL;
 	}
 	return 0;
