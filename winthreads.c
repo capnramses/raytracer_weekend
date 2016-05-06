@@ -27,7 +27,7 @@ DWORD WINAPI mythread (void* data) {
 		img_data[curr + 2] = (int)(255.0 * colour.z); // b
 	}
 	//fprintf (stderr, "fin thread %i,%i\n", td->x, td->y);
-  return 0;
+	return 0;
 }
 
 void wait_threads (int n) {
@@ -46,3 +46,4 @@ void create_threads (int n) {
 	wait_threads (n);
 	//printf ("threads done;");
 }
+
