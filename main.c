@@ -12,12 +12,18 @@
 #include <math.h>
 #include <assert.h>
 
+typedef enum Mat_Type {
+	LAMBERTIAN,
+	METAL,
+	DIELECTRIC
+} Mat_Type;
+
 // point at param = Ray.origin + direction * t;
 struct Ray { vec3 origin; vec3 direction; float tmax; float tmin; };
 typedef struct Ray Ray;
-struct Material { int type; vec3 albedo; float fuzz; float ior; };
+struct Material { Mat_Type type; vec3 albedo; float fuzz; float ior; };
 typedef struct Material Material;
-#define NSPHERES 4
+#define NSPHERES 5
 struct Sphere { vec3 centre; float radius; Material material; };
 typedef struct Sphere Sphere;
 struct World { Sphere spheres[NSPHERES]; };
@@ -48,7 +54,8 @@ vec3 refract (vec3 v, vec3 n, float ni_over_nt, bool* refracted) {
 	if (discrim > 0.0f) {
 		*refracted = true;
 		float sqd = sqrt (discrim);
-		return ni_over_nt * (v - n * dt) - n * sqd;
+		// ANTON: fixed this.uv here was v in my code
+		return ni_over_nt * (uv - n * dt) - n * sqd;
 	}
 	return v;
 }
@@ -57,7 +64,7 @@ vec3 refract (vec3 v, vec3 n, float ni_over_nt, bool* refracted) {
 float schlick (float cosine, float ref_idx) {
 	float r0 = (1.0f - ref_idx) / (1.0f + ref_idx);
 	r0 = r0 * r0;
-	return r0 + (1.0f - r0) * powf ((1.0f - cosine), 5.0f);
+	return r0 + (1.0f - r0) * pow ((1.0 - cosine), 5.0);
 }
 
 Ray scatter_lambert (Ray inray, Hit_Record hr) {
@@ -81,7 +88,8 @@ Ray scatter_metal (Ray inray, Hit_Record hr, bool* bounced) {
 	outray.tmin = inray.tmin;
 	outray.tmax = inray.tmax;
 	*bounced = false;
-	if (dot_vec3 (reflray, hr.n) > 0.0f) { *bounced = true; }
+	// ANTON fixed this. outray.direction was just reflray.
+	if (dot_vec3 (outray.direction, hr.n) > 0.0f) { *bounced = true; }
 	return outray;
 }
 
@@ -95,8 +103,12 @@ Ray scatter_dielectric (Ray inray, Hit_Record hr) {
 	if (dot_vec3 (inray.direction, hr.n) > 0.0f) {
 		outward_normal = -hr.n;
 		ni_over_nt = hr.material.ior;
-		cosine = hr.material.ior * dot_vec3 (inray.direction, hr.n) /
-			length_vec3 (inray.direction);
+		// TODO -- upgrade this later to match notes
+		//cosine = hr.material.ior * dot_vec3 (inray.direction, hr.n) /
+		//	length_vec3 (inray.direction);
+		// upgraded one:
+		cosine = dot_vec3 (inray.direction, hr.n) / length_vec3 (inray.direction);
+		cosine = sqrt (1 - hr.material.ior * hr.material.ior * (1 - cosine * cosine));
 	} else {
 		outward_normal = hr.n;
 		ni_over_nt = 1.0f / hr.material.ior;
@@ -153,7 +165,7 @@ bool hit_spheres (Ray ray, const Sphere* spheres, Hit_Record* hr) {
 vec3 colour_ray (Ray ray, const World* world, int depth) {
 	Hit_Record hr;
 	hr.t = FLT_MAX;
-	hr.material.type = 0;
+	hr.material.type = LAMBERTIAN;
 	hr.material.albedo = (vec3){0.0f, 0.0f, 0.0f};
 	hr.material.fuzz = 0.0f;
 	hr.material.ior = 1.0f;
@@ -164,16 +176,16 @@ vec3 colour_ray (Ray ray, const World* world, int depth) {
 		bool valid = true, bounced = true;
 		vec3 atten;
 		switch (hr.material.type) {
-			case 0:
+			case LAMBERTIAN:
 				scattray = scatter_lambert (ray, hr);
 				atten = hr.material.albedo;
 			break;
-			case 1:
+			case METAL:
 				scattray = scatter_metal (ray, hr, &bounced);
 				atten = hr.material.albedo;
 				if (!bounced) { valid = false; }
 			break;
-			case 2:
+			case DIELECTRIC:
 				scattray = scatter_dielectric (ray, hr);
 				atten = (vec3){1.0f, 1.0f, 1.0f};
 			break;
@@ -185,36 +197,43 @@ vec3 colour_ray (Ray ray, const World* world, int depth) {
 			return (vec3){0.0f, 0.0f, 0.0f};
 		}
 	}
-	return (vec3){0.5f, 0.7f, 1.0f};
+	//return (vec3){0.5f, 0.7f, 1.0f};
+	return (vec3){0.920, 0.626, 0.822}; // pink sky
 }
 
 void define_world (World* world) {
 	assert (world);
 	world->spheres[0].centre = (vec3){0.0f, 0.0f, -1.0f};
 	world->spheres[0].radius = 0.5f;
-	world->spheres[0].material.type = 0;
-	world->spheres[0].material.albedo = (vec3){0.8f, 0.3f, 0.3f};
+	world->spheres[0].material.type = LAMBERTIAN;
+	world->spheres[0].material.albedo = (vec3){0.5f, 0.2f, 0.1f};
 	world->spheres[0].material.fuzz = 0.0f;
 	world->spheres[1].centre = (vec3){0.0f, -100.5f, -1.0f};
 	world->spheres[1].radius = 100.0f;
-	world->spheres[1].material.type = 0;
-	world->spheres[1].material.albedo = (vec3){0.8f, 0.8f, 0.0f};
+	world->spheres[1].material.type = LAMBERTIAN;
+	world->spheres[1].material.albedo = (vec3){0.2f, 0.3f, 0.8f};
 	world->spheres[1].material.fuzz = 0.0f;
 	world->spheres[2].centre = (vec3){1.0f, 0.0f, -1.0f};
 	world->spheres[2].radius = 0.5f;
-	world->spheres[2].material.type = 1;
+	world->spheres[2].material.type = METAL;
 	world->spheres[2].material.albedo = (vec3){0.8f, 0.6f, 0.2f};
-	world->spheres[2].material.fuzz = 0.3f;
+	world->spheres[2].material.fuzz = 0.5f;
 	world->spheres[3].centre = (vec3){-1.0f, 0.0f, -1.0f};
 	// negative radius means normal points inwards == hollow glass sphere
 	world->spheres[3].radius = 0.5f;
-	world->spheres[3].material.type = 2;
+	world->spheres[3].material.type = DIELECTRIC;
 	world->spheres[3].material.albedo = (vec3){0.8f, 0.8f, 0.8f};
 	world->spheres[3].material.ior = 1.5f;
+	world->spheres[4].centre = (vec3){-1.0f, 0.0f, -1.0f};
+	// negative radius means normal points inwards == hollow glass sphere
+	world->spheres[4].radius = -0.45f;
+	world->spheres[4].material.type = DIELECTRIC;
+	world->spheres[4].material.albedo = (vec3){0.8f, 0.8f, 0.8f};
+	world->spheres[4].material.ior = 1.5f;
 }
 
 int main () {
-	int nx = 200, ny = 100, nsamples = 100;
+	int nx = 1200, ny = 800, nsamples = 50;
 	float aspect = (float)nx / (float)ny;
 	vec3 lower_left_corner = {-aspect, -1.0f, -1.0f}; // of screen
 	vec3 horizontal = {aspect * 2.0f, 0.0f, 0.0f}; // width of screen
